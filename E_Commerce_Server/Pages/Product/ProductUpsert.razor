@@ -1,0 +1,174 @@
+﻿@page "/product/create"
+@page "/product/edit/{Id:int}"
+@inject ICategoryRepository _categoryRepository
+@inject IProductRepository _productRepository
+@inject NavigationManager _navigationManager
+@inject IFileUpload _fileUpload
+@inject IJSRuntime _jsRuntime
+
+<div class="form-container p-3">
+    <div class="row my-2">
+        <h3 class="card-title text-primary mb-3 ml-3">
+            @Title
+        </h3>
+        <div class="col-md-10">
+            @if (IsLoading)
+            {
+                <div class="text-center">
+                    <img src="/images/loading.gif" width="100" />
+                </div>
+            }
+            else
+            {
+                <EditForm Model="Product" OnValidSubmit="UpsertProduct">
+                    <DataAnnotationsValidator></DataAnnotationsValidator>
+                    <ValidationSummary></ValidationSummary>
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label">Name</label>
+                        <div class="col-sm-10">
+                            <InputText @bind-Value="Product.Name" class="form-control"></InputText>
+                            <ValidationMessage For="(() => Product.Name)"></ValidationMessage>
+                        </div>
+                    </div>
+                    <div class="form-group row pt-3">
+                        <label class="col-sm-2 col-form-label">Author</label>
+                        <div class="col-sm-10">
+                            <InputText @bind-Value="Product.Author" class="form-control"></InputText>
+                            <ValidationMessage For="(() => Product.Author)"></ValidationMessage>
+                        </div>
+                    </div>
+                    <div class="form-group row pt-3">
+                        <label class="col-sm-2 col-form-label">Description</label>
+                        <div class="col-sm-10">
+                            <InputText @bind-Value="Product.Description" class="form-control"></InputText>
+                            <ValidationMessage For="(() => Product.Description)"></ValidationMessage>
+                        </div>
+                    </div>
+                    <div class="row pt-3">
+                        <div class="col-sm-2"></div>
+                        <div class="form-group col-sm-5">
+                            <div class="form-check">
+                                <label class="form-check-label">Is Shop Favourites</label>
+                                <InputCheckbox @bind-Value="Product.ShopFavourites" class="form-check-input"></InputCheckbox>
+                            </div>
+                        </div>
+                        <div class="form-group col-sm-5">
+                            <div class="form-check">
+                                <label class="form-check-label">Is Customer Favourites</label>
+                                <InputCheckbox @bind-Value="Product.CustomerFavourites" class="form-check-input"></InputCheckbox>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group row pt-3">
+                        <label class="col-sm-2 col-form-label">Category</label>
+                        <div class="col-sm-10">
+                            <InputSelect @bind-Value="Product.CategoryId" class="form-select">
+                                <option value="0" disabled="disabled" selected>--Select Category--</option>
+                                @foreach (var category in Categories)
+                                {
+                                    <option value="@category.Id">@category.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="(() => Product.CategoryId)"></ValidationMessage>
+                        </div>
+                    </div>
+                    <div class="form-group row pt-3">
+                        <label class="col-sm-2 col-form-label">Image</label>
+                        <div class="col-sm-10">
+                            <InputFile OnChange="HandleImageUpload" class="form-control"></InputFile>
+                            <ValidationMessage For="(() => Product.ImageUrl)"></ValidationMessage>
+                        </div>
+                    </div>
+                    <div class="form-group py-3">
+                        <button class="btn btn-primary">@Title</button>
+                        <NavLink href="product" class="btn btn-warning">Back To Products</NavLink>
+                    </div>
+                </EditForm>
+            }
+        </div>
+        <div class="col-md-2">
+            @if (!IsLoading)
+            {
+                <img src="@Product.ImageUrl" class="image-container p-3 w-100" />
+            }
+        </div>
+    </div>
+</div>
+
+
+@code {
+    [Parameter] public int Id { get; set; }
+    private ProductDTO Product { get; set; } = new()
+    {
+        ImageUrl = "/images/product/default.svg"
+    };
+    private IEnumerable<CategoryDTO> Categories { get; set; } = new List<CategoryDTO>();
+    public string Title { get; set; } = "Create";
+    public bool IsLoading { get; set; } = true;
+    public string OldImageUrl { get; set; }
+
+    protected async override Task OnInitializedAsync()
+    {
+        await Task.Delay(500);
+        Categories = await _categoryRepository.GetAll();
+        if (Id == 0)
+        {
+            IsLoading = false;
+        }
+        else
+        {
+            Product = await _productRepository.GetById(Id);
+            OldImageUrl = Product.ImageUrl;
+            Title = "Update";
+            IsLoading = false;
+        }
+    }
+
+    private async Task UpsertProduct()
+    {
+        if (Id == 0)
+        {
+            var result = await _productRepository.Create(Product);
+        }
+        else
+        {
+            if (OldImageUrl != Product.ImageUrl)
+            {
+                _fileUpload.DeleteFile(OldImageUrl);
+            }
+            var result = await _productRepository.Update(Product);
+        }
+        _navigationManager.NavigateTo("product");
+    }
+
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        IsLoading = true;
+        try
+        {
+            if (e.GetMultipleFiles().Count > 0)
+            {
+                foreach (var file in e.GetMultipleFiles())
+                {
+                    System.IO.FileInfo fileInfo = new System.IO.FileInfo(file.Name);
+                    if (fileInfo.Extension.ToLower() == ".jpg" ||
+                        fileInfo.Extension.ToLower() == ".png" ||
+                        fileInfo.Extension.ToLower() == ".jpeg" ||
+                        fileInfo.Extension.ToLower() == ".svg")
+                    {
+                        Product.ImageUrl = await _fileUpload.UploadFile(file);
+                    }
+                    else
+                    {
+                        // fail toastr
+                    }
+                }
+            }
+            IsLoading = false;
+        }
+        catch (Exception ex)
+        {
+            // toastr service
+        }
+    }
+}
